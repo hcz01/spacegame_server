@@ -1,6 +1,6 @@
 ﻿namespace spacegame_server
 {
-    partial class Form1
+    partial class main
     {
         /// <summary>
         /// 必需的设计器变量。

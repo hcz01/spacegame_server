@@ -13,11 +13,11 @@ using System.Windows.Forms;
 
 namespace spacegame_server
 {
-    public partial class Form1 : Form
+    public partial class main : Form
     {
 
         List<string>ClientNames = new List<string>();
-        public Form1()
+        public main()
         {
             
             InitializeComponent();
@@ -33,11 +33,11 @@ namespace spacegame_server
         public  void SocketServie()
         {
             listBox1.Items.Add(("server active"));
-            string host = "127.0.0.1";//IP地址
-            int port = 2000;//端口
+            string host = "127.0.0.1";//ip
+            int port = 2000;//port
             socket.Bind(new IPEndPoint(IPAddress.Parse(host), port));
-            socket.Listen(100);//设定最多100个排队连接请求   
-            Thread myThread = new Thread(ListenClientConnect);//通过多线程监听客户端连接  
+            socket.Listen(100);//max 100  
+            Thread myThread = new Thread(ListenClientConnect);
             myThread.Start();
           
         }
@@ -49,7 +49,6 @@ namespace spacegame_server
             while (true)
             {
                 Socket clientSocket = socket.Accept();
-              //  clientSocket.Send(Encoding.UTF8.GetBytes("sono il server"));
                 Thread receiveThread = new Thread(ReceiveMessage);
                 receiveThread.Start(clientSocket);
             }
@@ -83,25 +82,86 @@ namespace spacegame_server
                     // Console.WriteLine("il messaggio ricevuto", myClientSocket.RemoteEndPoint.ToString(), Encoding.UTF8.GetString(result, 0, receiveNumber));
                     //return the data of client
                     //check this name is validate
-                    if (risultato!="" && CheckExsisteClientNames(risultato)==false)
-                    {
-                        sendStr = "true";
-                        registClient(risultato);
-                        WriteTextSafe(risultato);
-                    }
-                    else
-                        sendStr = "false";
-                    byte[] bs = Encoding.UTF8.GetBytes(sendStr);
-                    myClientSocket.Send(bs, bs.Length, 0);  //send the data of client
+                   sendStr=checkTypeMsg(risultato);
+                    //checke need open to game mode 
+                    if (sendStr == "2;true")
+                        vsPc(true, myClientSocket);
+
+                   byte[] bs = Encoding.UTF8.GetBytes(sendStr);
+                   myClientSocket.Send(bs, bs.Length, 0);  //send the data of client
+
 
                 }
                 catch (Exception ex)
                 {
-                   MessageBox.Show(ex.Message);
+                  // MessageBox.Show(ex.Message);
                     myClientSocket.Close();//close clientsoket
                     break;
                 }
             }
+        }
+
+        private string checkTypeMsg(string msg)
+        {
+            if (msg != "" && msg != null)
+            {
+                string[] str = msg.Split(';');// [0] type  [1] context
+                int type = Int32.Parse(str[0]);
+                string context=str[1];
+                switch (type)
+                {
+                    // regist name
+                    case 0:
+                        if (context != "" && context != " " && context != null && CheckExsisteClientNames(context) == false)
+                        {
+                            registClient(context);
+                            WriteTextSafe(context);
+                            return buildMsg(0, "true");
+                        }
+                        break;
+                    //vs client
+                    case 1:
+
+                        break;
+                    //vs computer
+                    case 2:
+                        //check does ready for start game
+                        if(context=="ready")
+                            return buildMsg(2, "true");
+                        else
+                            return buildMsg(2, "false");
+                        break;
+                    default:
+                        break;
+                }
+            }
+            return buildMsg(0,"false");
+
+        }
+
+        private void vsPc(bool ready,object clientSocket)
+        {
+            //start the game if client is ready
+            string sendStr;
+            Socket myClientSocket = (Socket)clientSocket;
+            byte[] bs;
+            Random r;
+            int count=0;
+            while (ready==true)
+            {
+                System.Threading.Thread.Sleep(500);
+                count++;
+                if (count == 120)
+                        break;
+                r = new Random();
+                sendStr = buildMsg(2, r.Next(4).ToString());
+                bs = Encoding.UTF8.GetBytes(sendStr);
+                myClientSocket.Send(bs, bs.Length, 0);  //send the data of client
+            }
+        }
+        private string buildMsg(int type, string msg)
+        {
+            return type + ";" + msg;
         }
 
         private void registClient(string name)
