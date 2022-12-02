@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Net;
 using System.Net.Sockets;
@@ -18,7 +19,7 @@ namespace spacegame_server
         // poinf of game 
         PointF p = new PointF(125, 100);
         PointF p2 = new PointF(377, 100);
-        
+
         List<string> WaitClients = new List<string>();
         List<Socket> listSoket = new List<Socket>();
 
@@ -33,6 +34,7 @@ namespace spacegame_server
         private void button1_Click(object sender, EventArgs e)
         {
             SocketServie();
+            button1.Enabled = false;
         }
         Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         private static byte[] result = new byte[1024];
@@ -40,6 +42,7 @@ namespace spacegame_server
         public void SocketServie()
         {
             listBox1.Items.Add(("server active"));
+
             string host = "127.0.0.1";//ip
             int port = 2000;//port
             socket.Bind(new IPEndPoint(IPAddress.Parse(host), port));
@@ -47,17 +50,19 @@ namespace spacegame_server
             Thread myThread = new Thread(ListenClientConnect);
             myThread.Start();
 
-        }
 
+        }
 
         private void ListenClientConnect()
         {
 
             while (true)
             {
+                WriteTextSafe("waiting for a client...");
                 Socket clientSocket = socket.Accept();
-                Thread receiveThread = new Thread(ReceiveMessage);
-                receiveThread.Start(clientSocket);
+                ClientManager cm = new ClientManager(this, clientSocket);
+                Thread receiveThread = new Thread(cm.doClient);
+                receiveThread.Start();
             }
         }
 
@@ -67,13 +72,13 @@ namespace spacegame_server
             if (listBox1.InvokeRequired)
             {
                 // Call this same method but append THREAD2 to the text
-                Action safeWrite = delegate { WriteTextSafe($"{text} (THREAD2)"); };
+                Action safeWrite = delegate { WriteTextSafe($"{text}"); };
                 listBox1.Invoke(safeWrite);
             }
             else
                 listBox1.Items.Add(text);
         }
-        private void ReceiveMessage(object clientSocket)
+        public void ReceiveMessage(object clientSocket)
         {
             string sendStr;
             Socket myClientSocket = (Socket)clientSocket;
@@ -91,9 +96,9 @@ namespace spacegame_server
                     //check this name is validate
                     sendStr = checkTypeMsg(risultato, myClientSocket);
                     //checke need open to game mode 
-                     if (sendStr == "2;true")
-                         vsPc(true, myClientSocket);
-                     else if (sendStr == "4;true")
+                    if (sendStr == "2;true")
+                        vsPc(true, myClientSocket);
+                    else if (sendStr == "4;true")
                         vsClient(true, myClientSocket);
 
                     byte[] bs = Encoding.UTF8.GetBytes(sendStr);
@@ -101,7 +106,6 @@ namespace spacegame_server
                 }
                 catch (Exception ex)
                 {
-                    // MessageBox.Show(ex.Message);
                     myClientSocket.Close();//close clientsoket
                     break;
                 }
@@ -110,7 +114,6 @@ namespace spacegame_server
         private void SentMsg(string sentstr, Socket clientSocket)
         {
             string sendMessage = sentstr;//the strign send for server
-            sendMessage = sentstr;//context send for server
             int i = clientSocket.Send(Encoding.UTF8.GetBytes(sendMessage));
 
         }
@@ -123,7 +126,7 @@ namespace spacegame_server
                 string[] str = msg.Split(';');// [0] type  [1] context
                 int type = Int32.Parse(str[0]);
                 string context = str[1];
-               
+
                 switch (type)
                 {
                     // regist name
@@ -157,7 +160,7 @@ namespace spacegame_server
                         break;
                     //client vs client
                     case 4:
-                        if(listSoket.Contains(clientSocket)!=true)
+                        if (listSoket.Contains(clientSocket) != true)
                         {
                             WaitClients.Add(context);
                             listSoket.Add(clientSocket);
@@ -168,7 +171,6 @@ namespace spacegame_server
                         }
 
                         break;
-
                     case 5:
                         break;
                     default:
@@ -194,12 +196,8 @@ namespace spacegame_server
                 r = new Random();
                 sendStr = buildMsg(2, r.Next(4).ToString());
                 if (count == 20)
-                {
-                    bool result = Winner();
-                    bs = Encoding.UTF8.GetBytes(result.ToString());
-                    myClientSocket.Send(bs, bs.Length, 0);  //send the data of client
                     break;
-                }
+
                 bs = Encoding.UTF8.GetBytes(sendStr);
                 myClientSocket.Send(bs, bs.Length, 0);  //send the data of client
             }
@@ -207,41 +205,33 @@ namespace spacegame_server
 
         private void vsClient(bool ready, object clientSocket)
         {
-           Socket socket1=GetSocket(clientSocket);
-           Socket socket2 = (Socket)clientSocket;
+            Socket socket1 = GetSocket(clientSocket);
+            Socket socket2 = (Socket)clientSocket;
             if (socket1 == null)
                 return;
-            SentMsg(buildMsg(4,"ready"),socket1);
-            SentMsg(buildMsg(4,"ready"),socket2);
+            SentMsg(buildMsg(4, "ready"), socket1);
+            SentMsg(buildMsg(4, "ready"), socket2);
             //start game
-            
+
 
 
 
         }
         private Socket GetSocket(object clientSocket)
         {
-            int i=0;
+
             foreach (Socket item in listSoket)
             {
-                if(item!=listSoket[i])
+                if (item != (Socket)clientSocket)
                 {
-                    listSoket.RemoveAt(i);
+                    listSoket.Remove(item);
                     listSoket.Remove((Socket)clientSocket);
+                    SentMsg(buildMsg(4, "true"), item);
                     return item;
                 }
-                i++;
             }
             return null;
         }
-        private bool Winner()
-        {
-            
-
-            return false;
-        }
-
-        
         private string buildMsg(int type, string msg)
         {
             return type + ";" + msg;
